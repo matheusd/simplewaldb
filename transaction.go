@@ -16,6 +16,7 @@ type txTableCfg struct {
 
 // TxConfig defines a prepared tx configuration.
 type TxConfig struct {
+	db        *DB
 	lockOrder []*txTableCfg
 	tables    map[TableKey]*txTableCfg
 }
@@ -60,6 +61,15 @@ func (tt *TxTable) Put(key Key, data []byte) error {
 	return tt.tab.put(key, data)
 }
 
+// Count returns the number of items in the table.
+func (tt *TxTable) Count() (int, error) {
+	if tt.tx.done {
+		return 0, ErrTxDone
+	}
+
+	return tt.tab.count(), nil
+}
+
 // Tx is an open transaction in the DB.
 type Tx struct {
 	done bool
@@ -99,7 +109,7 @@ func (tx *Tx) Write(key TableKey) (TxTable, error) {
 
 // PrepareTx prepares a new database transaction.
 //
-// A prepared transaction may be reused multiple times, but is NOT safe for
+// A prepared transaction may be reused multiple times, and is safe for
 // concurrent access by multiple goroutines.
 //
 // readTables is the list of tables that will be locked for reading only.
@@ -109,6 +119,7 @@ func (tx *Tx) Write(key TableKey) (TxTable, error) {
 func (db *DB) PrepareTx(readTables []TableKey, writeTables []TableKey) (*TxConfig, error) {
 	nbTables := len(readTables) + len(writeTables)
 	cfg := TxConfig{
+		db:        db,
 		lockOrder: make([]*txTableCfg, 0, nbTables),
 		tables:    make(map[TableKey]*txTableCfg, nbTables),
 	}
@@ -153,4 +164,20 @@ func (db *DB) PrepareTx(readTables []TableKey, writeTables []TableKey) (*TxConfi
 	})
 
 	return &cfg, nil
+}
+
+// RunTx runs the given function as a transaction. It ends the transaction after
+// f returns.
+func (txc *TxConfig) RunTx(f func(tx Tx) error) error {
+	tx, err := txc.db.BeginTx(txc)
+	if err != nil {
+		return err
+	}
+
+	err = f(tx)
+	endErr := txc.db.EndTx(&tx)
+	if err != nil {
+		return err
+	}
+	return endErr
 }

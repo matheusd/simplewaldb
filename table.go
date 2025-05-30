@@ -61,6 +61,11 @@ func (tab *table) read(key Key, buf []byte) (int, error) {
 	return tab.readEntry(entry, buf)
 }
 
+// count returns the number of items in the table.
+func (tab *table) count() int {
+	return len(tab.index)
+}
+
 // get returns the data of the key as a new slice.
 func (tab *table) get(key Key) ([]byte, error) {
 	entry, ok := tab.index[key]

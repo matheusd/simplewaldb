@@ -9,6 +9,7 @@ applications, with minimal dependencies.
 > This is alpha quality software, provided with NO WARRANTIES either express or
 > implied. USE AT YOUR OWN RISK.
 
+[CHANGELOG](CHANGELOG.md)
 
 # Philosophy & Intended Use
 
@@ -93,4 +94,7 @@ func testDB() error {
 - Add WAL for atomicity (maybe?)
 - Add ability to backtrack entries
 - Add backup/restore functions
+
+
+# Changelog
 
