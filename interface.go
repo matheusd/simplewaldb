@@ -4,7 +4,10 @@ package simplewaldb
 const KeySize = 16
 
 // Key is the key to entries in a table.
-type Key [KeySize]byte
+//
+// This is used as a type alias to ensure any 16 byte array type can work as a
+// key (including, for example, raw UUIDs).
+type Key = [KeySize]byte
 
 var emptyKey Key
 

@@ -1,5 +1,9 @@
 # Changelog
 
+# v0.3.0
+
+- Switched `Key` to a type alias
+
 # v0.2.1
 
 - Fixed `TxTable.Put()` callable with read only tables
