@@ -1,5 +1,7 @@
 # simplewaldb: A Simple Prototyping DB
 
+[![Go Reference](https://pkg.go.dev/badge/matheusd.com/simplewaldb.svg)](https://pkg.go.dev/matheusd.com/simplewaldb)
+
 `simplewaldb` is a simple database system designed for easy prototyping of Go
 applications, with minimal dependencies.
 
