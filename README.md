@@ -35,39 +35,39 @@ better.
 
 ```go
 func testDB() error {
-	db, err := NewDB(
-		WithRootDir("/tmp/testdb"),
-		WithTables("table01", "table02"),
+    db, err := NewDB(
+        WithRootDir("/tmp/testdb"),
+        WithTables("table01", "table02"),
 
-		// Easy to find separator when hexdumping the test tables. Replace with
+        // Easy to find separator when hexdumping the test tables. Replace with
         // your own and do not make it public.
-		WithSeparatorHex("00000000000000000000000000000000000000000000000000000000000000"),
-	)
+        WithSeparatorHex("00000000000000000000000000000000000000000000000000000000000000"),
+    )
     if err != nil { return err }
 
     // Prepare a transaction. Can read from table01, can write to table02.
-	txc, err := db.PrepareTx([]TableKey{"table01"}, []TableKey{"table02"})
-	if err != nil { return err }
+    txc, err := db.PrepareTx([]TableKey{"table01"}, []TableKey{"table02"})
+    if err != nil { return err }
 
     // Begin the transaction.
-	tx, err := db.BeginTx(txc)
-	if err != nil { return nil }
+    tx, err := db.BeginTx(txc)
+    if err != nil { return nil }
 
     var key Key
     var buf []byte = make([]byte, 1024)
 
     // Write a value to table02.
-	tab02, err := tx.Write("table02")
+    tab02, err := tx.Write("table02")
     if err != nil { return err }
     if err := tab02.Put(key, buf); err != nil {
-	    return err 
+        return err 
     }
     
     // Read a value from table01.
-	tab01, err := tx.Read("table01")
+    tab01, err := tx.Read("table01")
     if err != nil { return err }
     if err := tab01.Read(key, buf); err != nil {
-	    return err 
+        return err 
     }
 
     // Finish the transaction.
