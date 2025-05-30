@@ -11,3 +11,6 @@ var emptyKey Key
 // TableKey is the key of a table. This MUST only contain filesystem-safe
 // characters.
 type TableKey string
+
+// Tables is syntax sugar to create a []TableKey.
+func Tables(tbls ...TableKey) []TableKey { return tbls }

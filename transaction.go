@@ -24,8 +24,9 @@ type TxConfig struct {
 // TxTable is a table obtained within the context of a transaction. Operations
 // on the table are only valid while the transaction is active.
 type TxTable struct {
-	tab *table
-	tx  *Tx
+	writable bool
+	tab      *table
+	tx       *Tx
 }
 
 // Read a record from the table into the buffer. This reads at most len(buf)
@@ -56,6 +57,9 @@ func (tt *TxTable) Get(key Key) ([]byte, error) {
 func (tt *TxTable) Put(key Key, data []byte) error {
 	if tt.tx.done {
 		return ErrTxDone
+	}
+	if !tt.writable {
+		return ErrTableNotWritableInTx(tt.tab.key)
 	}
 
 	return tt.tab.put(key, data)
