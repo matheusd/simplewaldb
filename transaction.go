@@ -108,7 +108,34 @@ func (tx *Tx) Write(key TableKey) (TxTable, error) {
 	if !tc.writable {
 		return TxTable{}, ErrTableNotWritableInTx(key)
 	}
-	return TxTable{tab: tc.table, tx: tx}, nil
+	return TxTable{tab: tc.table, tx: tx, writable: true}, nil
+}
+
+// Table returns the given table.
+//
+// The table will be writable or not depending on how it was configured.
+func (tx *Tx) Table(key TableKey) (TxTable, error) {
+	if tx.done {
+		return TxTable{}, ErrTxDone
+	}
+	tc, ok := tx.cfg.tables[key]
+	if !ok {
+		return TxTable{}, ErrTableNotInTx(key)
+	}
+	return TxTable{tab: tc.table, tx: tx, writable: tc.writable}, nil
+}
+
+// MustTable returns the given table or panics. This should only be called with
+// hardcoded table names that are known to be in the transaction and a not done
+// tx.
+//
+// The table will be writable or not depending on how it was configured.
+func (tx *Tx) MustTable(key TableKey) TxTable {
+	tt, err := tx.Table(key)
+	if err != nil {
+		panic(err)
+	}
+	return tt
 }
 
 // PrepareTx prepares a new database transaction.
