@@ -2,6 +2,7 @@ package simplewaldb
 
 import (
 	"bufio"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -88,7 +89,8 @@ func (tab *table) get(key Key) ([]byte, error) {
 // put appends the data for the specified key to the table. This is NOT safe
 // for concurrent calls.
 func (tab *table) put(key Key, data []byte) error {
-	copy(tab.sepBuffer[recordSeparatorSize:], key[:])
+	// Encode the key into the temp buffer (separator is already there).
+	hex.Encode(tab.sepBuffer[recordSeparatorSize:], key[:])
 
 	// Get current end of data file to determine offset
 	offset, err := tab.dataFile.Seek(0, io.SeekEnd)
@@ -106,9 +108,12 @@ func (tab *table) put(key Key, data []byte) error {
 	}
 
 	// Write the sepator.
-	_, err = tab.dataFile.Write(tab.sepBuffer)
+	n, err = tab.dataFile.Write(tab.sepBuffer)
 	if err != nil {
 		return err
+	}
+	if n != len(tab.sepBuffer) {
+		return errors.New("short write")
 	}
 
 	// Commit.
@@ -178,7 +183,10 @@ func newTable(rootDir string, tableName TableKey, recSep recordSeparator) (*tabl
 		index[entry.key] = entry
 	}
 
-	sepBuffer := make([]byte, KeySize+recordSeparatorSize)
+	sepBuffer := make([]byte, KeySize*2+recordSeparatorSize+8) // +8 padding
+	for i := range sepBuffer {
+		sepBuffer[i] = lfChar
+	}
 	copy(sepBuffer, recSep[:])
 
 	return &table{

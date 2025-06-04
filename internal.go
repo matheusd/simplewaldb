@@ -7,21 +7,25 @@ import (
 	"fmt"
 )
 
-const recordSeparatorSize = 32
+const recordSeparatorSize = 64
 
 // recordSeparator is the separator between records in data.
 type recordSeparator [recordSeparatorSize]byte
 
 func (rs *recordSeparator) fromHex(s string) error {
-	if len(s) != (recordSeparatorSize-1)*2 {
+	if len(s) != recordSeparatorSize-2 {
 		return errors.New("wrong string size")
 	}
+
+	// Try to decode in place to see if the hex is valid.
 	if _, err := hex.Decode(rs[1:], []byte(s)); err != nil {
 		return err
 	}
 
-	// First byte is always \n.
-	rs[0] = 10
+	// First and last byte is always \n.
+	rs[0] = lfChar
+	copy(rs[1:], s)
+	rs[len(rs)-1] = lfChar
 	return nil
 }
 

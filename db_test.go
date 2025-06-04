@@ -214,3 +214,44 @@ func TestRandomRW(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// BenchmarkDBPut benchmarks putting random keys in a single table in the DB.
+func BenchmarkDBPut(b *testing.B) {
+	rootDir := b.TempDir()
+	tableName := TableKey("test")
+	db, err := NewDB(
+		WithRootDir(rootDir),
+		WithTables(tableName),
+
+		// Easy to find separator when hexdumping the test tables.
+		WithSeparatorHex("00000000000000000000000000000000000000000000000000000000000000"),
+	)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	buf := make([]byte, 1024)
+	var key [16]byte
+
+	rngReader := rand.NewChaCha8([32]byte{})
+
+	txc, err := db.PrepareTx(nil, Tables(tableName))
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		rngReader.Read(key[:])
+		rngReader.Read(buf)
+		err := txc.RunTx(func(tx Tx) error {
+			tab := tx.MustTable(tableName)
+			return tab.Put(key, buf)
+		})
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
