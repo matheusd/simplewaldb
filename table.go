@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 )
@@ -98,6 +99,12 @@ func (tab *table) put(key Key, data []byte) error {
 		return err
 	}
 
+	// Get current end of index file to determine index offset
+	indexOffset, err := tab.indexFile.Seek(0, io.SeekEnd)
+	if err != nil {
+		return err
+	}
+
 	// Write the data.
 	n, err := tab.dataFile.Write(data)
 	if err != nil {
@@ -107,7 +114,7 @@ func (tab *table) put(key Key, data []byte) error {
 		return errors.New("short write")
 	}
 
-	// Write the sepator.
+	// Write the separator.
 	n, err = tab.dataFile.Write(tab.sepBuffer)
 	if err != nil {
 		return err
@@ -125,14 +132,18 @@ func (tab *table) put(key Key, data []byte) error {
 	var entry *indexRecord
 	if entry = tab.index[key]; entry == nil {
 		entry = &indexRecord{
-			key:    key,
-			offset: offset,
-			size:   int64(len(data)),
+			key:             key,
+			offset:          offset,
+			size:            int64(len(data)),
+			prevIndexOffset: math.MaxInt64,
+			indexOffset:     indexOffset,
 		}
 		tab.index[key] = entry
 	} else {
 		entry.offset = offset
 		entry.size = int64(len(data))
+		entry.prevIndexOffset = entry.indexOffset
+		entry.indexOffset = indexOffset
 	}
 
 	// Append entry to indexFile.
@@ -170,8 +181,10 @@ func newTable(rootDir string, tableName TableKey, recSep recordSeparator) (*tabl
 	index := make(map[Key]*indexRecord)
 	indexReader := bufio.NewReader(indexFile)
 	irBuf := make([]byte, indexRecordSize)
+	var offset int64
 	for i := 0; ; i++ {
-		_, err = io.ReadFull(indexReader, irBuf)
+		var n int
+		n, err = io.ReadFull(indexReader, irBuf)
 		if err != nil {
 			break
 		}
@@ -180,6 +193,8 @@ func newTable(rootDir string, tableName TableKey, recSep recordSeparator) (*tabl
 		if err := entry.decode(irBuf); err != nil {
 			return nil, fmt.Errorf("error reading entry %d: %v", i, err)
 		}
+		entry.offset, offset = offset, offset+int64(n)
+
 		index[entry.key] = entry
 	}
 

@@ -30,19 +30,26 @@ func (rs *recordSeparator) fromHex(s string) error {
 }
 
 // indexRecordSize is the size of an index record. An index record is:
+// 8 bytes hex-encoded data file index
+// 1 byte space
 // 16 bytes hex-encoded offset
 // 1 byte space
 // 16 bytes hex-encoded size
 // 1 byte space
 // 32 bytes hex-encoded key
+// 1 byte space
+// 16 bytes hex-encoded previous index offset
 // 1 byte line feed
-const indexRecordSize = 8*2 + 1 + 8*2 + 1 + KeySize*2 + 1
+const indexRecordSize = 4*2 + 1 + 8*2 + 1 + 8*2 + 1 + KeySize*2 + 1 + 8*2 + 1
 
 // indexRecord is an entry in the index.
 type indexRecord struct {
-	offset int64
-	size   int64
-	key    Key
+	dataFile        uint32
+	offset          int64
+	size            int64
+	key             Key
+	prevIndexOffset int64
+	indexOffset     int64
 }
 
 const spaceChar = byte(' ')
@@ -57,7 +64,13 @@ func (ir *indexRecord) decode(b []byte) error {
 	var auxArr [8]byte
 	aux := auxArr[:]
 
-	_, err := hex.Decode(aux, b[:16])
+	_, err := hex.Decode(aux, b[:8])
+	if err != nil {
+		return fmt.Errorf("wrong data file: %v", err)
+	}
+	ir.dataFile = binary.BigEndian.Uint32(aux)
+
+	_, err = hex.Decode(aux, b[:16])
 	if err != nil {
 		return fmt.Errorf("wrong offset: %v", err)
 	}
@@ -76,6 +89,13 @@ func (ir *indexRecord) decode(b []byte) error {
 		return fmt.Errorf("wrong key: %v", err)
 	}
 
+	b = b[32+1:]
+	_, err = hex.Decode(aux, b[:16])
+	if err != nil {
+		return fmt.Errorf("wrong previous index offset: %v", err)
+	}
+	ir.prevIndexOffset = int64(binary.BigEndian.Uint64(aux))
+
 	return nil
 }
 
@@ -89,19 +109,28 @@ type indexRecordWriter struct {
 // not be modified outside the writer.
 func (irw *indexRecordWriter) writeEntry(ir *indexRecord) []byte {
 	var i int
-	binary.BigEndian.PutUint64(irw.aux, uint64(ir.offset))
-	i += hex.Encode(irw.buf, irw.aux)
 
+	binary.BigEndian.PutUint32(irw.aux, ir.dataFile)
+	i += hex.Encode(irw.buf[i:], irw.aux[:4])
+	irw.buf[i] = spaceChar
+	i++ // Space
+
+	binary.BigEndian.PutUint64(irw.aux, uint64(ir.offset))
+	i += hex.Encode(irw.buf[i:], irw.aux)
 	irw.buf[i] = spaceChar
 	i++ // Space
 
 	binary.BigEndian.PutUint64(irw.aux, uint64(ir.size))
 	i += hex.Encode(irw.buf[i:], irw.aux)
-
 	irw.buf[i] = spaceChar
 	i++ // Space
 
 	i += hex.Encode(irw.buf[i:], ir.key[:])
+	irw.buf[i] = spaceChar
+	i++ // space
+
+	binary.BigEndian.PutUint64(irw.aux, uint64(ir.prevIndexOffset))
+	i += hex.Encode(irw.buf[i:], irw.aux)
 	irw.buf[i] = lfChar
 
 	return irw.buf

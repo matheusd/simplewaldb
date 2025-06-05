@@ -94,6 +94,9 @@ func testDB() error {
 - Add WAL for atomicity (maybe?)
 - Add ability to backtrack entries
 - Add backup/restore functions
+- Add multiple data files support
+  - Add ability to reclaim space (move live data to new data file)
+    - Alternative: punch holes as sparse files in reclaimed space
 
 
 # Changelog

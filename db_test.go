@@ -7,6 +7,7 @@ import (
 	"log"
 	"maps"
 	"math/rand/v2"
+	"os"
 	"slices"
 	"testing"
 	"time"
@@ -25,13 +26,11 @@ func TestRandomRW(t *testing.T) {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 
 	// Replace with the code below to keep the data after the test.
-	rootDir := t.TempDir()
-	/*
-		rootDir, err := os.MkdirTemp("", "")
-		if err != nil {
-			t.Fatal(err)
-		}
-	*/
+	// rootDir := t.TempDir()
+	rootDir, err := os.MkdirTemp("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Logf("Root dir: %v", rootDir)
 
 	tables := make([]TableKey, 20)
