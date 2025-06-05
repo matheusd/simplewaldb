@@ -70,6 +70,7 @@ func (ir *indexRecord) decode(b []byte) error {
 	}
 	ir.dataFile = binary.BigEndian.Uint32(aux)
 
+	b = b[8+1:]
 	_, err = hex.Decode(aux, b[:16])
 	if err != nil {
 		return fmt.Errorf("wrong offset: %v", err)

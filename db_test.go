@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+	"matheusd.com/depvendoredtestify/require"
 )
 
 // TestRandomRW tests writing and reading from multiple goroutines concurrently.
@@ -50,18 +51,14 @@ func TestRandomRW(t *testing.T) {
 	}
 
 	// Write values to each table.
-	txc, err := db.PrepareTx(nil, tables)
-	if err != nil {
-		t.Fatal(err)
-	}
+	txc, err := db.PrepareTx(WithWriteTables(tables...))
+	require.NoError(t, err)
 	tx, err := db.BeginTx(txc)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	rngReader := rand.NewChaCha8([32]byte{})
 	buf := make([]byte, MAXVALUESIZE)
 	for _, tabName := range tables {
-		tab, err := tx.Write(tabName)
+		tab, err := tx.Table(tabName)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -75,9 +72,7 @@ func TestRandomRW(t *testing.T) {
 		}
 	}
 	err = db.EndTx(&tx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	randomTables := func() []TableKey {
 		n := rand.IntN(len(tables))
@@ -105,7 +100,7 @@ func TestRandomRW(t *testing.T) {
 			buf := make([]byte, MAXVALUESIZE)
 			for ctx.Err() == nil {
 				tables := randomTables()
-				txc, err := db.PrepareTx(tables, nil)
+				txc, err := db.PrepareTx(WithReadTables(tables...))
 				if err != nil {
 					return err
 				}
@@ -116,7 +111,7 @@ func TestRandomRW(t *testing.T) {
 				if len(tables) > 0 {
 					for i := 0; i < READVALUES; i++ {
 						tabName := tables[rand.IntN(len(tables))]
-						tab, err := tx.Read(tabName)
+						tab, err := tx.Table(tabName)
 						key := keyFromInt(rand.IntN(MAXVALUES))
 						_, err = tab.Read(Key(key), buf)
 						if err != nil && !errors.Is(err, ErrKeyNotFound{}) {
@@ -150,7 +145,10 @@ func TestRandomRW(t *testing.T) {
 				if i < len(tables) {
 					readTables, writeTables = tables[:i], tables[i:]
 				}
-				txc, err := db.PrepareTx(readTables, writeTables)
+				txc, err := db.PrepareTx(
+					WithReadTables(readTables...),
+					WithWriteTables(writeTables...),
+				)
 				if err != nil {
 					return err
 				}
@@ -162,7 +160,7 @@ func TestRandomRW(t *testing.T) {
 				if len(readTables) > 0 {
 					for i := 0; i < READVALUES; i++ {
 						tabName := readTables[rand.IntN(len(readTables))]
-						tab, err := tx.Read(tabName)
+						tab, err := tx.Table(tabName)
 						key := keyFromInt(rand.IntN(MAXVALUES))
 						_, err = tab.Read(Key(key), buf)
 						if err != nil && !errors.Is(err, ErrKeyNotFound{}) {
@@ -175,7 +173,7 @@ func TestRandomRW(t *testing.T) {
 				if len(writeTables) > 0 {
 					for i := 0; i < WRITEVALUES; i++ {
 						tabName := writeTables[rand.IntN(len(writeTables))]
-						tab, err := tx.Write(tabName)
+						tab, err := tx.Table(tabName)
 						key := keyFromInt(rand.IntN(MAXVALUES))
 						rngReader.Read(buf)
 						err = tab.Put(Key(key), buf[:rand.IntN(len(buf))])
@@ -209,48 +207,75 @@ func TestRandomRW(t *testing.T) {
 
 	t.Logf("Running...")
 	err = g.Wait()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 }
 
-// BenchmarkDBPut benchmarks putting random keys in a single table in the DB.
 func BenchmarkDBPut(b *testing.B) {
-	rootDir := b.TempDir()
 	tableName := TableKey("test")
-	db, err := NewDB(
-		WithRootDir(rootDir),
-		WithTables(tableName),
-
-		// Easy to find separator when hexdumping the test tables.
-		WithSeparatorHex("00000000000000000000000000000000000000000000000000000000000000"),
-	)
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	buf := make([]byte, 1024)
-	var key [16]byte
-
 	rngReader := rand.NewChaCha8([32]byte{})
+	value := make([]byte, 1024)
+	rngReader.Read(value)
 
-	txc, err := db.PrepareTx(nil, Tables(tableName))
-	if err != nil {
-		b.Fatal(err)
+	setupTest := func(b *testing.B) *TxConfig {
+		rootDir := b.TempDir()
+		db, err := NewDB(
+			WithRootDir(rootDir),
+			WithTables(tableName),
+		)
+		require.NoError(b, err)
+		b.Cleanup(func() { db.Close() })
+
+		txc, err := db.PrepareTx(WithWriteTables(tableName))
+		require.NoError(b, err)
+		return txc
 	}
 
-	b.ReportAllocs()
-	b.ResetTimer()
+	tests := []struct {
+		sameKey bool
+		apiType string
+	}{{
+		sameKey: true,
+		apiType: "table",
+	}, {
+		sameKey: true,
+		apiType: "tx",
+	}, {
+		sameKey: false,
+		apiType: "table",
+	}, {
+		sameKey: false,
+		apiType: "tx",
+	}}
 
-	for i := 0; i < b.N; i++ {
-		rngReader.Read(key[:])
-		rngReader.Read(buf)
-		err := txc.RunTx(func(tx Tx) error {
-			tab := tx.MustTable(tableName)
-			return tab.Put(key, buf)
+	for _, tc := range tests {
+		name := fmt.Sprintf("sameKey=%v,api=%v", tc.sameKey, tc.apiType)
+		b.Run(name, func(b *testing.B) {
+			var key Key
+			rngReader.Read(key[:])
+
+			txc := setupTest(b)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				if !tc.sameKey {
+					rngReader.Read(key[:])
+				}
+
+				err := txc.RunTx(func(tx Tx) error {
+					if tc.apiType == "table" {
+						tab, err := tx.Table(tableName)
+						if err != nil {
+							return err
+						}
+
+						return tab.Put(key, value)
+					} else {
+						tx.Put(tableName, key, value)
+						return tx.Err()
+					}
+				})
+				require.NoError(b, err)
+			}
 		})
-		if err != nil {
-			b.Fatal(err)
-		}
 	}
 }

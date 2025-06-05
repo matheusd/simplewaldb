@@ -47,3 +47,35 @@ func defineOptions(opts ...Option) *config {
 	}
 	return c
 }
+
+type prepTxCfg struct {
+	readTables  []TableKey
+	writeTables []TableKey
+}
+
+// TxOption is an option when preparing a transaction.
+type TxOption func(c *prepTxCfg)
+
+// WithReadTables defines tables that will be available only for reading.
+func WithReadTables(tables ...TableKey) TxOption {
+	return func(c *prepTxCfg) {
+		c.readTables = tables
+	}
+}
+
+// WithWriteTables defines tables that will be available for reading and
+// writing.
+func WithWriteTables(tables ...TableKey) TxOption {
+	return func(c *prepTxCfg) {
+		c.writeTables = tables
+	}
+}
+
+// definePrepTxCfg defines the config for preparing a tx.
+func definePrepTxCfg(opts ...TxOption) *prepTxCfg {
+	c := &prepTxCfg{}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
+}

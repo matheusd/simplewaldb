@@ -1,14 +1,16 @@
 package simplewaldb
 
 import (
-	"bytes"
 	"math/rand/v2"
 	"testing"
+
+	"matheusd.com/depvendoredtestify/require"
 )
 
 // TestTableCorrectness tests basic table operation correctness.
 func TestTableCorrectness(t *testing.T) {
 	const MAXVALUES = 1000
+	const MAXVALUESIZE = 1024
 
 	rootDir := t.TempDir()
 	tableName := TableKey("test")
@@ -19,7 +21,7 @@ func TestTableCorrectness(t *testing.T) {
 	}
 
 	// Write values.
-	buf := make([]byte, 1024)
+	buf := make([]byte, MAXVALUESIZE, MAXVALUESIZE)
 	keys := make([]Key, MAXVALUES)
 	values := make(map[Key][]byte)
 	rngReader := rand.NewChaCha8([32]byte{})
@@ -31,7 +33,10 @@ func TestTableCorrectness(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		values[keys[i]] = append(make([]byte, 0, cap(buf)), buf[:n]...) // make same cap
+
+		// Clone buf but use same cap.
+		bufCopy := append(make([]byte, 0, cap(buf)), buf[:n]...)
+		values[keys[i]] = bufCopy
 	}
 
 	// Overwrite some values.
@@ -49,32 +54,22 @@ func TestTableCorrectness(t *testing.T) {
 	}
 
 	// Close the table.
-	if err := tab.close(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, tab.close())
 
 	// Reopen.
 	tab, err = newTable(rootDir, tableName, testRecSeparator)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Read random values.
 	for range MAXVALUES * 4 {
 		idx := rand.IntN(MAXVALUES)
 		key := keys[idx]
-		rngReader.Read(buf)
+		clear(buf)
 		n, err := tab.read(key, buf)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		value := values[key]
-		if n != len(value) {
-			t.Fatalf("Unexpected read size: got %d, want %d", n, len(value))
-		}
-		if !bytes.Equal(value, buf[:n]) {
-			t.Fatalf("Value does not match expected")
-		}
+		require.Equal(t, len(value), n)
+		require.Equal(t, value, buf[:n])
 	}
 }
 

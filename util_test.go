@@ -1,6 +1,11 @@
 package simplewaldb
 
-import "crypto/rand"
+import (
+	"crypto/rand"
+	"testing"
+
+	"matheusd.com/depvendoredtestify/require"
+)
 
 // keyFromInt creates a key from an int.
 func keyFromInt(i int) Key {
@@ -23,4 +28,27 @@ func mustRandomKey() Key {
 	var key Key
 	rand.Read(key[:])
 	return key
+}
+
+// newTestDB initializes a new test DB with the given options.
+func newTestDB(t testing.TB, opts ...Option) *DB {
+	rootDir := t.TempDir()
+	db, err := NewDB(
+		append([]Option{WithRootDir(rootDir)}, opts...)...,
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { db.Close() })
+	return db
+}
+
+// runTestTx runs a transaction and tests it did not error.
+func runTestTx(t testing.TB, txc *TxConfig, f func(tx Tx) error) {
+	err := txc.RunTx(f)
+	require.NoError(t, err)
+}
+
+func prepTestTx(t testing.TB, db *DB, opts ...TxOption) *TxConfig {
+	txc, err := db.PrepareTx(opts...)
+	require.NoError(t, err)
+	return txc
 }

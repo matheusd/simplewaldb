@@ -68,11 +68,17 @@ func (tab *table) count() int {
 	return len(tab.index)
 }
 
+// exists returns true if the given key is set in the table.
+func (tab *table) exists(key Key) bool {
+	_, ok := tab.index[key]
+	return ok
+}
+
 // get returns the data of the key as a new slice.
 func (tab *table) get(key Key) ([]byte, error) {
 	entry, ok := tab.index[key]
 	if !ok {
-		return nil, ErrKeyNotFound{}
+		return nil, ErrKeyNotFound(key)
 	}
 
 	data := make([]byte, entry.size)
@@ -181,19 +187,19 @@ func newTable(rootDir string, tableName TableKey, recSep recordSeparator) (*tabl
 	index := make(map[Key]*indexRecord)
 	indexReader := bufio.NewReader(indexFile)
 	irBuf := make([]byte, indexRecordSize)
-	var offset int64
+	var indexOffset int64
 	for i := 0; ; i++ {
 		var n int
-		n, err = io.ReadFull(indexReader, irBuf)
+		_, err = io.ReadFull(indexReader, irBuf)
 		if err != nil {
 			break
 		}
 
 		entry := new(indexRecord)
 		if err := entry.decode(irBuf); err != nil {
-			return nil, fmt.Errorf("error reading entry %d: %v", i, err)
+			return nil, fmt.Errorf("error reading index entry %d: %v", i, err)
 		}
-		entry.offset, offset = offset, offset+int64(n)
+		entry.indexOffset, indexOffset = indexOffset, indexOffset+int64(n)
 
 		index[entry.key] = entry
 	}
