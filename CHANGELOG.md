@@ -1,5 +1,11 @@
 # Changelog
 
+# v0.4.0
+
+- Encode separator as hex instead of binary in data file
+- Track the offset of index entries (allows reverse iteration over old key values)
+- Add fluent API to ease transaction updates
+
 # v0.3.0
 
 - Switched `Key` to a type alias
