@@ -165,6 +165,47 @@ func (tab *table) put(key Key, data []byte) error {
 	return nil // Indicate success
 }
 
+// rangeRevEntries ranges over the entries of a key in reverse order (most
+// recent values first).
+//
+// Iteration stops if f returns an error.
+func (tab *table) rangeRevEntries(key Key, f func(indexRecord) error) error {
+	// Return early if the entry does not exist.
+	entry := tab.index[key]
+	if entry == nil {
+		return nil
+	}
+
+	// Copy the value.
+	ir := *entry
+	var indexReadBuf = make([]byte, indexRecordSize)
+
+	// Iterate.
+	for {
+		if err := f(ir); err != nil {
+			return err
+		}
+
+		if ir.prevIndexOffset == math.MaxInt64 {
+			// Finished.
+			return nil
+		}
+
+		n, err := tab.indexFile.ReadAt(indexReadBuf, ir.prevIndexOffset)
+		if err != nil {
+			return err
+		}
+		if n != indexRecordSize {
+			return errors.New("short read")
+		}
+
+		err = ir.decode(indexReadBuf)
+		if err != nil {
+			return err
+		}
+	}
+}
+
 // newTable creates or opens an existing table.
 func newTable(rootDir string, tableName TableKey, recSep recordSeparator) (*table, error) {
 	// TODO: lock files?

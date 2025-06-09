@@ -1,7 +1,10 @@
 package simplewaldb
 
 import (
+	"bytes"
+	"errors"
 	"math/rand/v2"
+	"slices"
 	"testing"
 
 	"matheusd.com/depvendoredtestify/require"
@@ -16,9 +19,7 @@ func TestTableCorrectness(t *testing.T) {
 	tableName := TableKey("test")
 
 	tab, err := newTable(rootDir, tableName, testRecSeparator)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Write values.
 	buf := make([]byte, MAXVALUESIZE, MAXVALUESIZE)
@@ -70,6 +71,81 @@ func TestTableCorrectness(t *testing.T) {
 		value := values[key]
 		require.Equal(t, len(value), n)
 		require.Equal(t, value, buf[:n])
+	}
+}
+
+// TestTabRangeRevEntries tests reverse ranging over table entries.
+func TestTabRangeRevEntries(t *testing.T) {
+	const MAXVALUES = 1000
+	const MAXVALUESIZE = 1024
+
+	rngReader := rand.NewChaCha8([32]byte{})
+	buf := make([]byte, MAXVALUESIZE, MAXVALUESIZE)
+
+	// Pick a key to trace over the range.
+	var checkKey Key
+	rngReader.Read(checkKey[:])
+	var checkValues [][]byte
+
+	rootDir := t.TempDir()
+	tableName := TableKey("test")
+
+	tab, err := newTable(rootDir, tableName, testRecSeparator)
+	require.NoError(t, err)
+
+	// Write a bunch of values.
+	for range MAXVALUES {
+		// 10% of the values will be on checkKey. The others will be
+		// randomly written.
+		var key Key
+		writeCheckKey := rand.IntN(10) == 0
+		if writeCheckKey {
+			key = checkKey
+		} else {
+			rngReader.Read(key[:])
+		}
+
+		n := rand.IntN(cap(buf))
+		rngReader.Read(buf[:n])
+		err := tab.put(key, buf[:n])
+		require.NoError(t, err)
+
+		// Clone buf but use same cap.
+		if writeCheckKey {
+			bufCopy := slices.Clone(buf[:n])
+			checkValues = append(checkValues, bufCopy)
+		}
+	}
+
+	// Range backwards over the keys, checking the values. Do it twice: once
+	// with the table still open, the second time after reopening.
+	for range 2 {
+		var wantValueIdx = len(checkValues) - 1
+		err := tab.rangeRevEntries(checkKey, func(ir indexRecord) error {
+			n, err := tab.readEntry(&ir, buf)
+			if err != nil {
+				return err
+			}
+			if n != int(ir.size) {
+				return errors.New("read size is smaller than entry size")
+			}
+
+			if !bytes.Equal(buf[:n], checkValues[wantValueIdx]) {
+				return errors.New("value is wrong")
+			}
+
+			wantValueIdx--
+			return nil
+		})
+
+		// Range should've completed successfully.
+		require.NoError(t, err)
+		require.Equal(t, -1, wantValueIdx)
+
+		// Close and reopen for next iteration.
+		require.NoError(t, tab.close())
+		tab, err = newTable(rootDir, tableName, testRecSeparator)
+		require.NoError(t, err)
 	}
 }
 
